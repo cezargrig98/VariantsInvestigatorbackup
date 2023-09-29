@@ -1,0 +1,118 @@
+---
+title: "VariantsInvestigator"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: column
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+library(flexdashboard)
+library(tibble)
+library(dbplyr)
+library(dplyr)
+library(RSQLite)
+library(DBI)
+library(tidyr)
+library(flexdashboard)
+library(shiny)
+library(purrr)
+library(janitor)
+library(gt)
+
+#oggetto che crea una connessione al database sqlite
+#funzione per filtrare solo le loss of function high confidence
+
+```
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+### Filtering control widgets
+
+```{r}
+library(shinyWidgets)
+
+sliderInput(inputId = "gnomAD", "Maximum gnomAD allele frequency", min = 0, max = 1,
+                       step = 0.001, value = 1)
+sliderInput(inputId = "geno_qual", "minimum genotype quality", min = 0, max = 99,
+                       step = 1, value = 0)
+sliderInput(inputId = "read_dp", "min/max read depth", min = 0, max = 200,
+                       step = 1, value = c(0,200))
+sliderInput(inputId = "SIFT", "Maximum SIFT value", min = 0, max = 1,
+                       step = 0.01, value = 1)
+sliderInput(inputId = "PolyPhen", "Minimum PolyPhen value", min = 0, max = 1,
+                       step = 0.01, value = 0)
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+```
+Row {data-width=600}
+-----------------------------------------------------------------------
+### Chart D
+```{r}
+
+
+giant_filter <- function(minsft, maxpol, gnomax, gq, conseq_h){
+   usable %>%
+    dplyr::filter(
+      SIFT_values <= minsft | is.na(SIFT_values)==TRUE & 
+      PolyPhen_values >= maxpol | is.na(PolyPhen_values)==TRUE &
+      gnomAD_AF_1 <= gnomax | is.na(gnomAD_AF_1)==TRUE &
+      GQ >= gq
+      )
+}
+
+render_gt({giant_filter(input$SIFT, 
+                        input$PolyPhen, 
+                        input$gnomAD,
+                        input$geno_qual
+                        ) %>%
+    select("start","end", "REF", "ALT", "GQ", "DP_1", "SYMBOL_1", "PolyPhen_values", "PolyPhen_prediction", "SIFT_values", "SIFT_prediction", "gnomAD_AF_1", "Consequence", "IMPACT_1", "LoF_1", "LoF_flags_1", "LoF_filter_1") %>%
+    gt()%>%
+    opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  ) %>%
+    data_color(
+    columns = PolyPhen_prediction,
+    palette = "Blues"
+  )%>%
+    data_color(
+    columns = SIFT_prediction,
+    palette = "Greens"
+  )})
+ 
+```
+Column {data-width=150}
+-----------------------------------------------------------------------
+
+### Chart B
+
+```{html}
+
+```
+
+### Chart C
+
+```{r}
+
+```
+
