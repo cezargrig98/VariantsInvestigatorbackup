@@ -1,0 +1,157 @@
+vep \
+-i /home/shared_projects/TESI/tesi_cezar_grigorean/data/NG2191_NG2191_whole-genome_vep.vcf.gz \
+-o /home/shared_projects/TESI/tesi_cezar_grigorean/data/dataset_bsa.vcf.gz \
+--compress_output bgzip \
+--force \
+-e \
+-a GRCh38 --cache --offline \
+--dir_cache /home/shared_projects/VEP_CACHES \
+--plugin LoF,loftee_path:/home/shared_projects/VEP_CACHES/Plugins \
+--vcf
+
+splittare vcf
+bcftools +split-vep \
+/home/shared_projects/TESI/tesi_cezar_grigorean/data/NG2191_NG2191_whole-genome_vep.vcf.gz \
+-c Allele,Consequence,IMPACT,SYMBOL,Gene,Feature_type,Feature,BIOTYPE,EXON,INTRON,HGVSc,HGVSp,cDNA_position,CDS_position,Protein_position,Amino_acids,Codons,Existing_variation,DISTANCE,STRAND,FLAGS,VARIANT_CLASS,SYMBOL_SOURCE,HGNC_ID,CANONICAL,MANE_SELECT,MANE_PLUS_CLINICAL,TSL,APPRIS,CCDS,ENSP,SWISSPROT,TREMBL,UNIPARC,UNIPROT_ISOFORM,GENE_PHENO,SIFT,PolyPhen,DOMAINS,miRNA,HGVS_OFFSET,AF,AFR_AF,AMR_AF,EAS_AF,EUR_AF,SAS_AF,AA_AF,EA_AF,gnomAD_AF,gnomAD_AFR_AF,gnomAD_AMR_AF,gnomAD_ASJ_AF,gnomAD_EAS_AF,gnomAD_FIN_AF,gnomAD_NFE_AF,gnomAD_OTH_AF,gnomAD_SAS_AF,MAX_AF,MAX_AF_POPS,CLIN_SIG,SOMATIC,PHENO,PUBMED,MOTIF_NAME,MOTIF_POS,HIGH_INF_POS,MOTIF_SCORE_CHANGE,TRANSCRIPTION_FACTORS,LoF,LoF_filter,LoF_flags,LoF_info \
+-s worst \
+-O v \
+> whole_genome_split.vcf.gz
+
+Informazioni
+Pedigree file per vcf e studio di heterozigosity
+
+
+https://github.com/nf-core/hgtseq/blob/683daaf41bb396839445e603152b45daa141ced4/assets/analysis_report.Rmd#L126 mooolto più avanti sarà utile per creare una roba grafica non di merda
+
+
+https://github.com/lescai-teaching/datasets_reference_only/blob/main/annotations/extract_annotations.R
+per avere singola annotazione per la consequence column
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+conda create -c bioconda bcftools -n bcftools
+ per creare un ambiente conda per usare bcftools, adesso non mi interessa definire la versione quindi uso l'ultima
+
+-n dà il nome all'env che ho creato (in questo caso ambiente conda)
+
+
+
+il file è nella cartella data e si chiama
+NG2191_NG2191_whole-genome_vep.vcf.gz
+11:49
+contiene 8,187,942 (8 milioni) di varianti :faccia_leggermente_sorridente:
+11:49
+direi che ti dovrebbero bastare per uno stress test
+11:50
+cmq se poi vuoi ridurle ad un exome basta che faccia i seguenti passaggi:
+tabix -p vcf file.vcf.gz
+per creare l’indice e poi sempre con tabix
+tabix -Rh file_capture.bed file.vcf.gz | bgzip -c >file_ontarget.vcf.gz
+11:51
+dove file_capture.bed è il bed file di un exome che puoi prendere per esempio dal sito di Twist Biosciences
+11:52
+quello di twist è anche gia qua se vuoi
+/home/shared_projects/COLLABS/valente/test_twistdata/Twist_Exome_Target_GRCh37_merged_extended50.bed 
+ma è un GRCh37 mentre il tuo VCF è un GRCh38
+
+
+Cezar Grigorean
+  11:58
+Devo convertirlo, farci robe strane o basta solo cambiare argomento del genoma?
+
+
+Francesco
+  11:59
+secondo me la cosa piu appropriata sarebbe usare quello che si chiama hg38
+11:59
+pero devi fare un paio di cose
+11:59
+vedi istruzioni qua:
+https://lescailab.atlassian.net/wiki/spaces/CGT/pages/25624637/Istruzioni+per+processare+VCF+da+Sarek#Preparazione-capture
+Istruzioni per processare VCF da Sarek in Computational Genomics Team
+Last updated 10 months ago by Francesco Lescai
+More actions...
+Aggiunto da Confluence Cloud
+12:00
+non seguire “filtraggio del VCF” per quello segui le indicazioni che ti ho dato sopra
+12:00
+pero questo SOLO se vuoi fare un esoma
+12:00
+se vuoi provare il whole genome, basta solo che splitti con bcftools
+
+
+Cezar Grigorean
+  12:01
+Oook, poi appena funziona decentemente tutto provo a farci anche lo stress test
+
+
+Francesco
+  12:01
+ok
+
+
+
+BACKUP
+https://lescailab.unipv.it/guides/eos_guide/backup.html#
+
+
+
+vi serve per modificare file da linea di comando
+comandi base
+i: insert, serve per modificare in generale
+per salvare le modifiche, uscire dalla modalità insert con esc
+digitare: ":wq!" e poi invio per salvare file con le modifiche e chiuderlo
+Se vuoi salvare solo file senza chiudere: ":w!"
+per cercare con vi una stringa "/"
+per navigare tra gli oggetti trovati "n"
+
+
+
+estrarre e reinserire un header
+bcftools view --header-only file.vcf.gz > vcf_header.txt
+bcftools reheader -h new_header.txt input.vcf > output.vcf
+
+splittare un vcf per varianti multialleliche
+bcftools --multiallelics +both input.vcf > biallelic
+
+
+
+le due operazioni cruciali sono:
+
+match dei seqlevels del tuo oggetto con varianti e del genoma
+https://github.com/nf-core/hgtseq/blob/683daaf41bb396839445e603152b45daa141ced4/assets/analysis_report.Rmd#L142C9-L142C9
+
+2. assegnazione delle lunghezze dei cromosomi che esistono nei tuoi granges
+https://github.com/nf-core/hgtseq/blob/683daaf41bb396839445e603152b45daa141ced4/assets/analysis_report.Rmd#L144
+analysis_report.Rmd
+seqlengths(integration_noextra) = seqlengths(newSeqInfoData_noextra)[seqlevels(newSeqInfoData_noextra) %in% seqlevels(integration_noextra)]
+<https://github.com/nf-core/hgtseq|nf-core/hgtseq>nf-core/hgtseq | Aggiunto da GitHub
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
