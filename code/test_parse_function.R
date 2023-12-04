@@ -16,32 +16,37 @@ library(foreach)
 
 #creo file index per velocizzare la lettura del vcf
 
-
 ## parte di apertura del VCF
 
-indexTabix("/home/shared_projects/TESI/tesi_cezar_grigorean/data/whole_genome_split.vcf.gz", "vcf")
+con <- dbConnect(RSQLite::SQLite(), "speed_test.sqlite")
 
-vcftab <- VcfFile("/home/shared_projects/TESI/tesi_cezar_grigorean/data/whole_genome_split.vcf.gz", yieldSize = 100000)
+vcftab <- VcfFile("/home/shared_projects/TESI/tesi_cezar_grigorean/data/whole_genome_split_clean.vcf.gz", yieldSize = 100000)
 open(vcftab)
 
 subset <- ScanVcfParam(
   info = c(
     "IMPACT",
     "SYMBOL",
+    "Gene",
+    "EXON",
+    "INTRON",
     "Consequence",
     "SIFT",
     "PolyPhen",
+    "DOMAINS",
     "gnomAD_AF",
+    "CLIN_SIG",
+    "PHENO",
     "LoF",
     "LoF_filter",
     "LoF_flags",
     "LoF_info"
   ),
   geno = c(
-    "AD",
     "GT",
     "DP",
-    "GQ"
+    "GQ",
+    "PL"
   )
 )
 
@@ -59,14 +64,16 @@ vcfchunking <- list()
 k <- 1
 
 
+# rm(vcfchunking, k)
 
 
-
-while (nrow(vcfchunking[[k]] <- readVcf(vcftab), param = subset) ){
+while (nrow(vcfchunking[[k]] <- readVcf(vcftab, param = subset)) ){
   # Print progress
   cat("new lines read:", k, "\n")
   k <- k + 1
 }
+
+close(vcftab)
 
 vcfchunking <- vcfchunking[1:k-1]
 
@@ -74,26 +81,30 @@ z <- length(vcfchunking)
 
 
 vcfparsing <- function(chunk){
-  parallel::clusterEvalQ(cs, {library(DBI);con <- dbConnect(RSQLite::SQLite(), dbname = "variant_new.sqlit")})
+  # parallel::clusterEvalQ(cs, {library(DBI);con <- dbConnect(RSQLite::SQLite(), dbname = "variant_new.sqlit")})
   #raccolgo informazioni su genotipo
   GT <- as_tibble(geno(chunk)$GT) %>%
-    rename("GT" = "NG2191_NG2191")
+    rename("gt" = "NG2191_NG2191")
   
-  #informazioni sull'allele depth
-  AD <- as_tibble(geno(chunk)$AD) %>%
-    rename("AD" = "NG2191_NG2191") %>%
-    unnest_wider(col = "AD", names_sep = "_")
+  #informazioni sulla PL
+  PL <- as_tibble(geno(chunk)$PL) %>%
+    rename("pl" = "NG2191_NG2191")
+  PL[] <- lapply(PL, as.character)
+  PL$pl <- gsub("c", "", PL$pl)
+  PL$pl <- gsub(")", "", PL$pl)
+  PL$pl <- sub(".", "", PL$pl)
   #informazioni sulla depth
   DP <- as_tibble(geno(chunk)$DP) %>%
-    rename("DP" = "NG2191_NG2191")
+    rename("dp" = "NG2191_NG2191")
   #informazione sulla genotype quality
   GQ <- as_tibble(geno(chunk)$GQ) %>% 
-    rename("GQ" = "NG2191_NG2191")
+    rename("gq" = "NG2191_NG2191")
   
   get_alternative <- function(alt_list){
     alleles = paste0(unlist(lapply(alt_list, as.character)), collapse = ",")
     return(alleles)
   }
+  
   get_first <- function(x){
     res = NULL
     if(is.list(x)){
@@ -106,15 +117,14 @@ vcfparsing <- function(chunk){
   }
   
   #unisco in un tibble le varie informazioni sul genotipo
-  genotype <- bind_cols(GT, AD, DP, GQ)
+  genotype <- bind_cols(gt, pl, dp, gq)
   print("genotype")
   
-  rm(GT, AD, DP, GQ)
+  rm(GT, PL, DP, GQ)
   
   #creo un tibble con le info del VCF (precedentemente subsettate con ScanVcfParam)
   annotations_plain <- as_tibble(info(chunk)) %>%
     unnest_wider(col = where(~ type_sum(.x) == "list")|where(~ type_sum(.x) == "I<list>"), names_sep = "_")
-  
   print("info")
   
   #prendo l'allele ALT come colonna di stringhe per poterlo inserire su un database sql
@@ -131,7 +141,7 @@ vcfparsing <- function(chunk){
   
   #raccolgo informakioni sulla posizione delle varianti + creo una colonna dell'alt leggibile come char e non come DNA_string
   test_alt <- var_coordinates %>%
-    filter(length(ALT) > 1) %>% 
+    dplyr::filter(length(ALT) > 1) %>% 
     head(1L) %>% 
     pull(ALT)
   
@@ -175,22 +185,30 @@ vcfparsing <- function(chunk){
   list_tibble$PolyPhen_values <- gsub(")", "", list_tibble$PolyPhen_values) %>%
     as.numeric(list_tibble$PolyPhen_values)
   print("almost uploaded")
-  dbWriteTable(con, "variants", list_tibble, append = TRUE)
-  print("uploaded")
+  # dbWriteTable(con, "variants", list_tibble, append = TRUE)
+  # print("uploaded")
   
   #copio il VCF modificato in database
 }
 
 
 
-registerDoParallel(cores = 10)
 
-list_tibble <- list()
+registerDoParallel(cores = 15)
+
 
 foreach(i=1:z) %dopar% {
   vcfparsing(vcfchunking[[i]])
 } 
 
+ready_to_go <- bind_cols(vcfchunking)
 
+rm(vcfchunking)
 
+copy_to(con, ready_to_go, "variants",
+        temporary = FALSE, 
+        indexes = list(
+          c("seqnames", "start", "end", "ref", "ALT"))
+)
 
+rm(ready_to_go)

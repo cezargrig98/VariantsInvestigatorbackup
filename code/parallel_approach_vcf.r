@@ -15,28 +15,8 @@ x <- detectCores()
 
 con <- DBI::dbConnect(RSQLite::SQLite(), dbname = "speed_test")
 
-subset <- ScanVcfParam(
-  info = c(
-    "IMPACT",
-    "SYMBOL",
-    "Consequence",
-    "SIFT",
-    "PolyPhen",
-    "gnomAD_AF",
-    "LoF",
-    "LoF_filter",
-    "LoF_flags",
-    "LoF_info"
-     ),
-  geno = c(
-    "AD",
-    "GT",
-    "DP",
-    "GQ"
-   )
-  )
 
-size = 1000
+size = 10000
 
 
 readVcf(TabixFile(fl, yieldSize))
@@ -50,7 +30,7 @@ open(myVcfFile)
 chunksvcf <- list()
 k <- 1
 
-while (nrow( chunksvcf[[k]] <- readVcf(myVcfFile, param = subset))){
+while (nrow( chunksvcf[[k]] <- readVcf(myVcfFile))){
   print(k)
   k <- k+1
 }

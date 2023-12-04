@@ -17,7 +17,7 @@ library(DBI)
 
 
 
-indexTabix("/home/shared_projects/TESI/tesi_cezar_grigorean/data/whole_genome_split.vcf.gz", "vcf")
+
 #creo database sql per il VCF
 con <- DBI::dbConnect(RSQLite::SQLite(), dbname = "speed_test")
 ## parte di apertura del VCF
@@ -52,17 +52,14 @@ open(vcftab)
 #while (nrow(vcf_yield <- readVcf(tab, "hg19", param=param)))
 #  cat("vcf dim:", dim(vcf_yield), "\n")
 #close(tab)
-vcfchunking <- list()
+vcfchunked<- list()
 
 
 k <- 1
 
-registerDoParallel(10)
 
 
-
-while (nrow( vcfchunking[[k]] <- readVcf(vcftab,
-                                       param = subset)) ){
+while (nrow( vcfchunked[[k]] <- readVcf(vcftab)) ){
   # Print progress
   cat("new lines read:", k, "\n")
   k <- k + 1
@@ -72,19 +69,18 @@ vcfchunking <- vcfchunking[1:k-1]
 
 z <- length(vcfchunking)
 
-test_chunk <- vcfchunking[[1]]
 
-vcfparsing(test_chunk, con)
-
-
-
-
-registerDoParallel(cores = 10)
+registerDoParallel(15)
 
 foreach(i=1:z) %dopar% {
-  vcfparsing(vcfchunking[[i]], con)
+  vcfparsing(vcfchunked[[i]], con)
 }  
 
+copy_to(con, vcf, "variants",
+        temporary = FALSE, 
+        indexes = list(
+          c("seqnames", "start", "end", "ref", "ALT"))
+)
 
 variants_db <- tbl(con, "variants")
 

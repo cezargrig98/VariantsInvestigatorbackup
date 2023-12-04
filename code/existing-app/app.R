@@ -1,13 +1,3 @@
----
-title: "VariantsInvestigator"
-output: 
-  flexdashboard::flex_dashboard:
-    orientation: column
-    vertical_layout: fill
-runtime: shiny
----
-
-```{r global, include=FALSE}
 library(shiny)
 library(bslib)
 library(flexdashboard)
@@ -21,20 +11,10 @@ library(ggbio)
 library(plyranges)
 library(GenomicRanges)
 
-#oggetto che crea una connessione al database sqlite
 usable <- readRDS("subset_vars.rds")
-#funzione per filtrare solo le loss of function high confidence
 
-```
-
-Column {.sidebar}
------------------------------------------------------------------------
-
-### Filtering control widgets
-
-```{r}
-page_sidebar(
-  # title = "VariantsInvestigator",
+ui <- page_sidebar(
+  title = "VariantsInvestigator",
   sidebar = sidebar(
     title = "Filters",
     sliderInput(
@@ -223,14 +203,17 @@ page_sidebar(
   )
 )
 
+server <- function(input, output, session) {
+  # output$myImage <- renderImage({
+  #   list(
+  #     src = "/home/shared_projects/TESI/tesi_cezar_grigorean/code/www/VariantInvestigator_logo_blue.png",
+  #     contentType = "image/png",
+  #     width = 150,
+  #     height = 100
+  #   )
+  # }, deleteFile = FALSE)
 
-```
-Row {data-width=600}
------------------------------------------------------------------------
-### Chart D
-```{r}
-
-
+  
   output$table <- render_gt({
     usable %>%
       dplyr::filter(SIFT_values <= input$SIFT |
@@ -352,21 +335,6 @@ Row {data-width=600}
       # title("Varianti selezionate")
 
   })
+}
 
- 
-```
-Column {data-width=150}
------------------------------------------------------------------------
-
-### Chart B
-
-```{html}
-
-```
-
-### Chart C
-
-```{r}
-
-```
-
+shinyApp(ui, server)

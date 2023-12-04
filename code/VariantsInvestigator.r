@@ -14,12 +14,11 @@ library(purrr)
 library(parallel)
 
 
-indexTabix("/home/shared_projects/TESI/tesi_cezar_grigorean/data/whole_genome_split.vcf.gz.gz", "vcf")
 #creo database sql per il VCF
-con <- DBI::dbConnect(RSQLite::SQLite(), dbname = "new_variants.sqlit")
+con <- DBI::dbConnect(RSQLite::SQLite(), dbname = "new_variants_clean.sqlite")
 ## parte di apertura del VCF
 
-vcfchunking <- readVcf(TabixFile("/home/shared_projects/TESI/tesi_cezar_grigorean/data/whole_genome_split.vcf.gz.gz", yieldSize = 1000))
+vcfchunking <- readVcf(TabixFile("/home/shared_projects/TESI/tesi_cezar_grigorean/data/whole_genome_split_clean.vcf.gz"))
 ## parte in cui unisco tutto il vcf tramite ciclo while
 vcf <- list()
 k <- 1
@@ -299,59 +298,59 @@ rm(z,k, annotations_plain,vcf,var_coordinates,get_alternative,get_first,vcf,chun
 
 variants_db <- tbl(con, "variants")
 
-view(variants_db)
+# view(variants_db)
 #---------------
 
-#funzioni filtro-------------
-#frequenza gnomAD
-freq_gnomAD <- function(gnomin, gnomax){variants_db %>%
-    dplyr::filter(between(gnomAD_AF_1, gnomAD[1], gnomAD[2]))
-}
-#frequenza massima tra gnomAD, 1000genome e ESP
-freq_max <- function(min_maf, max_maf){variants_db %>%
-  dplyr::filter(between(MAX_AF, min_maf, max_maf))
-  }
-#frequenza 1000genome
-freq_1000genome <- function(min1000, max1000){variants_db %>%
-  dplyr::filter(between(AF, min1000, max1000))
-  }
-#genotype quality
-geno_qual <- function(gq){variants_db %>%
-  dplyr::filter(GenoQual >= gq)
-  }
-#read depth
-read_depth <-function(read_dp){variants_db %>%
-  dplyr::filter(readDP >= read_dp)
-  }
-#gene name
-gene_name <- function(name){variants_db %>%
-  dplyr::filter(SYMBOL_1 == name)
-}
-#dove cade la mutazione (conseguenza) -> da
-var_conseq <- function(conseq){variants_db %>%
-  dplyr::filter(Consequence %like% conseq)
-  }
-#esone/introne della mutazione
-exon <- function(ex){variants_db %>%
-  dplyr::filter(EXON == ex)
-  }
-intron <- function(intr){variants_db %>%
-  dplyr::filter(INTRON == intr)
-}
-#SIFT e PolyPhen
-sift <- function(minsft, maxsft){variants_db %>%
-    dplyr::filter(between(SIFT_values, minsft, maxsft))
-}
-polyphen <- function(minpol, maxpol){variants_db %>%
-    dplyr::filter(between(PolyPhen_values, minpol, maxpol))
-}
-#flag per lof annotate
-flag_lof <- function(){variants_db %>%
-    filter(LoF_1 == "HC")}
-
-polyphen(0,1)
-
-view(variants_db %>% select(LoF_1))
-#----------------------------
+# #funzioni filtro-------------
+# #frequenza gnomAD
+# freq_gnomAD <- function(gnomin, gnomax){variants_db %>%
+#     dplyr::filter(between(gnomAD_AF_1, gnomAD[1], gnomAD[2]))
+# }
+# #frequenza massima tra gnomAD, 1000genome e ESP
+# freq_max <- function(min_maf, max_maf){variants_db %>%
+#   dplyr::filter(between(MAX_AF, min_maf, max_maf))
+#   }
+# #frequenza 1000genome
+# freq_1000genome <- function(min1000, max1000){variants_db %>%
+#   dplyr::filter(between(AF, min1000, max1000))
+#   }
+# #genotype quality
+# geno_qual <- function(gq){variants_db %>%
+#   dplyr::filter(GenoQual >= gq)
+#   }
+# #read depth
+# read_depth <-function(read_dp){variants_db %>%
+#   dplyr::filter(readDP >= read_dp)
+#   }
+# #gene name
+# gene_name <- function(name){variants_db %>%
+#   dplyr::filter(SYMBOL_1 == name)
+# }
+# #dove cade la mutazione (conseguenza) -> da
+# var_conseq <- function(conseq){variants_db %>%
+#   dplyr::filter(Consequence %like% conseq)
+#   }
+# #esone/introne della mutazione
+# exon <- function(ex){variants_db %>%
+#   dplyr::filter(EXON == ex)
+#   }
+# intron <- function(intr){variants_db %>%
+#   dplyr::filter(INTRON == intr)
+# }
+# #SIFT e PolyPhen
+# sift <- function(minsft, maxsft){variants_db %>%
+#     dplyr::filter(between(SIFT_values, minsft, maxsft))
+# }
+# polyphen <- function(minpol, maxpol){variants_db %>%
+#     dplyr::filter(between(PolyPhen_values, minpol, maxpol))
+# }
+# #flag per lof annotate
+# flag_lof <- function(){variants_db %>%
+#     filter(LoF_1 == "HC")}
+# 
+# polyphen(0,1)
+# 
+# view(variants_db %>% select(LoF_1))
+# #----------------------------
 
 #------------------------------------------
