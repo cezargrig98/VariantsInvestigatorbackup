@@ -1,356 +1,373 @@
-
-#R code stuff-----------
-#carico i pacchetti necessari al funzionamento dell'app
-library(VariantAnnotation)
-library(tibble)
-library(Rsamtools)
-library(dbplyr)
-library(RSQLite)
-library(DBI)
-library(tidyr)
-library(flexdashboard)
 library(shiny)
-library(purrr)
-library(parallel)
+library(bslib)
+library(shinyWidgets)
+library(gt)
+library(tibble)
+library(DT)
+library(DBI)
+library(tidyverse)
+# library(ggplot2)
+library(ggbio)
+library(plyranges)
+library(GenomicFeatures)
+library(GenomicRanges)
+library(IRanges)
+library(RSQLite)
+library(Rsamtools)
+library(trackViewer)
+library(shinyFiles)
 
+# con <- dbConnect(RSQLite::SQLite(),
+#                  "/home/shared_projects/TESI/tesi_cezar_grigorean/data/test.sqlite"
+# )
+# 
+# datafile <- file_input_f()
 
-#creo database sql per il VCF
-con <- DBI::dbConnect(RSQLite::SQLite(), dbname = "new_variants_clean.sqlite")
-## parte di apertura del VCF
+ui <- page_sidebar(
+  sidebar = sidebar(
+    title = div(img(
+      src = "VariantInvestigator_logo_blue.png",
+      height = 130,
+      width = 200,
+      style = "margin:1px 1px"
+    ), ""),
+    
+    # fileInput("file", label = "input sqlite file"),
+    shinyDirButton("dir", "Select file", "Upload"),
+    
+    sliderInput(
+      inputId = "gnomad",
+      "Maximum gnomAD allele frequency",
+      min = 0,
+      max = 1,
+      step = 0.001,
+      value = 1
+    ),
+    
+    sliderInput(
+      inputId = "SIFT",
+      "Maximum SIFT value",
+      min = 0,
+      max = 1,
+      step = 0.01,
+      value = 1
+    ),
+    
+    sliderInput(
+      inputId = "PolyPhen",
+      "Minimum PolyPhen value",
+      min = 0,
+      max = 1,
+      step = 0.01,
+      value = 0
+    ),
+    
+    
+    pickerInput(
+      inputId = "impact",
+      label = "Variant impact",
+      choices = c("HIGH", "MODERATE", "LOW", "MODIFIER"),
+      selected = c("HIGH"),
+      options = list(`actions-box` = TRUE),
+      multiple = TRUE
+    ),
+    
+    pickerInput(
+      "HC",
+      "High confidence LOF variants",
+      choices = c("HC"),
+      selected = c("HC"),
+      multiple = TRUE
+    ),
+    
+    pickerInput(
+      inputId = "chr",
+      label = "Chromosomes in analysis",
+      choices = c(paste0("chr", as.character(c(1:22))),
+                  "chrX",
+                  "chrY",
+                  "chrM"),
+      selected = c(
+        paste0(
+          "chr", as.character(c(1:22))),
+                   "chrX",
+                   "chrY",
+                   "chrM"
+        ),
+      options = list(`actions-box` = TRUE),
+      multiple = TRUE
+    ),
+    
+    textInput("searchgene",
+              "Filter by gene name",
+              value = ""),
+    
+    pickerInput(
+      inputId = "conseq",
+      label = "Specific consequences (All consequences preselected)",
+      choices = c(
+        "transcript_ablation",
+        "splice_acceptor_variant",
+        "splice_donor_variant",
+        "stop_gained",
+        "frameshift_variant",
+        "stop_lost",
+        "start_lost",
+        "transcript_amplification",
+        "feature_elongation",
+        "feature_truncation",
+        "inframe_insertion",
+        "inframe_deletion",
+        "missense_variant",
+        "protein_altering_variant",
+        "splice_donor_5th_base_variant",
+        "splice_region_variant",
+        "splice_donor_region_variant",
+        "splice_polypyrimidine_tract_variant",
+        "incomplete_terminal_codon_variant",
+        "start_retained_variant",
+        "stop_retained_variant",
+        "synonymous_variant",
+        "coding_sequence_variant",
+        "mature_miRNA_variant",
+        "5_prime_UTR_variant",
+        "3_prime_UTR_variant",
+        "non_coding_transcript_exon_variant",
+        "intron_variant",
+        "NMD_transcript_variant",
+        "non_coding_transcript_variant",
+        "coding_transcript_variant",
+        "upstream_gene_variant",
+        "downstream_gene_variant",
+        "TFBS_ablation",
+        "TFBS_amplification",
+        "TF_binding_site_variant",
+        "regulatory_region_ablation",
+        "regulatory_region_amplification",
+        "regulatory_region_variant",
+        "intergenic_variant",
+        "sequence_variant"
+      ),
+      selected = c(
+        "transcript_ablation",
+        "splice_acceptor_variant",
+        "splice_donor_variant",
+        "stop_gained",
+        "frameshift_variant",
+        "stop_lost",
+        "start_lost",
+        "transcript_amplification",
+        "feature_elongation",
+        "feature_truncation",
+        "inframe_insertion",
+        "inframe_deletion",
+        "missense_variant",
+        "protein_altering_variant",
+        "splice_donor_5th_base_variant",
+        "splice_region_variant",
+        "splice_donor_region_variant",
+        "splice_polypyrimidine_tract_variant",
+        "incomplete_terminal_codon_variant",
+        "start_retained_variant",
+        "stop_retained_variant",
+        "synonymous_variant",
+        "coding_sequence_variant",
+        "mature_miRNA_variant",
+        "5_prime_UTR_variant",
+        "3_prime_UTR_variant",
+        "non_coding_transcript_exon_variant",
+        "intron_variant",
+        "NMD_transcript_variant",
+        "non_coding_transcript_variant",
+        "coding_transcript_variant",
+        "upstream_gene_variant",
+        "downstream_gene_variant",
+        "TFBS_ablation",
+        "TFBS_amplification",
+        "TF_binding_site_variant",
+        "regulatory_region_ablation",
+        "regulatory_region_amplification",
+        "regulatory_region_variant",
+        "intergenic_variant",
+        "sequence_variant"
+      ),
+      options = c(`actions-box` = TRUE),
+      multiple = TRUE
+    ),
+    
+    checkboxInput(inputId ="load", label = "Apply filters", value = FALSE)
+    
+    
+  ),
+  layout_columns(
+    card(
+      card_header("Variants"),
+      gt_output(outputId = "table"),
+      full_screen = TRUE
+    ),
+    card(
+      card_header("Affected genes"),
+      full_screen = TRUE,
+      
+      uiOutput("dropdownbutt"),
+      
+      plotOutput("genestbl")
+    ),
+    width = "400px"
+  )
+)
 
-vcfchunking <- readVcf(TabixFile("/home/shared_projects/TESI/tesi_cezar_grigorean/data/whole_genome_split_clean.vcf.gz"))
-## parte in cui unisco tutto il vcf tramite ciclo while
-vcf <- list()
-k <- 1
-while (nrow( vcf[[k]] <- readVcf(vcfchunking))){
-  print(k)
-  
-  #raccolgo informazioni sulle varianti
-  GT <- as.tibble(geno(vcf[[z]])$GT) %>%
-    rename("GT" = "NG2191_NG2191")
-  
-  
-  AD <- as.tibble(geno(vcf[[z]])$AD) %>%
-    rename("AD" = "NG2191_NG2191") %>%
-    unnest_wider(col = "AD", names_sep = "_")
-  
-  DP <- as_tibble(geno(vcf[[z]])$DP) %>%
-    rename("DP" = "NG2191_NG2191") %>%
-    unnest_wider(col="DP", names_sep = "_")
-  
-  GQ <- as_tibble(geno(vcf[[z]])$GQ) %>% 
-    rename("GQ" = "NG2191_NG2191")
-  
-  
-  MIN_DP <- as_tibble(geno(vcf[[z]])$MIN_DP) %>% 
-    rename("MIN_DP" = "NG2191_NG2191")
-  
-  
-  PGT <- as_tibble(geno(vcf[[z]])$PGT) %>% 
-    rename("PGT" = "NG2191_NG2191")
-  
-  
-  PID <- as_tibble(geno(vcf[[z]])$PID) %>% 
-    rename("PID" = "NG2191_NG2191")
-  
-  
-  PL <- as_tibble(geno(vcf[[z]])$PL) %>%
-    rename("PL" = "NG2191_NG2191") %>%
-    unnest_wider(col = "PL", names_sep = "_")
-  
-  PS <- as_tibble(geno(vcf[[z]])$PS) %>% 
-    rename("PS" = "NG2191_NG2191")
-  
-  RGQ <- as_tibble(geno(vcf[[z]])$RGQ) %>% 
-    rename("RGQ" = "NG2191_NG2191")
-  
-  
-  
-  genotype <- bind_cols(GT, AD, DP, GQ, MIN_DP, PGT, PID, PL, PS, RGQ)
-  
-  
-  
-  annotations_plain = as_tibble(info(vcf[[z]]))%>%
-    unnest_wider(col = where(~ type_sum(.x) == "list")|where(~ type_sum(.x) == "I<list>"), names_sep = "_")
-  
-  
-  
-  
-  get_alternative <- function(alt_list){
-    alleles = paste0(unlist(lapply(alt_list, as.character)), collapse = ",")
-    return(alleles)
-  }
-  get_first <- function(x){
-    res = NULL
-    if(is.list(x)){
-      res = x[[1]]
-    }
-    else {
-      res = x
-    }
-    return(x)
-  }
-  var_coordinates = as_tibble(rowRanges(vcf[[z]])) %>%
-    rowwise %>%
-    mutate(
-      ALT = get_alternative(ALT)
-    ) 
-  
-  
-  
-  
-  #rimuovo dalle info le colonne superflue, rendo digeribili le info al tibble
-  annotations_plain = as_tibble(info(vcf[[z]]))%>%
-    unnest_wider(col = where(~ type_sum(.x) == "list")|where(~ type_sum(.x) == "I<list>"), names_sep = "_")
-  
-  #raccolgo informazioni sulla posizione delle varianti
-  test_alt = var_coordinates %>%
-    filter(length(ALT) > 1) %>% 
-    head(1L) %>% 
-    pull(ALT)
-  
-  unlist(lapply(test_alt, as.character))
-  
-  
-  
-  get_alternative(test_alt)
-  
-  
-  #unisco informazioni e posizione delle varianti
-  
-  vcf[[z]] = bind_cols(
-    var_coordinates,
-    genotype,
-    annotations_plain
-  ) %>% 
-    dplyr::select(-("END")) %>% 
-    mutate(
-      across(where(~ type_sum(.x) == "fct"), as.character)
-    ) %>% 
-    dplyr::select(
-      where(~ type_sum(.x) == "int") | 
-        where(~ type_sum(.x) == "dbl") | 
-        where(~ type_sum(.x) == "chr")
+server <- function(input, output, session) {
+  output$myImage <- renderImage({
+    list(
+      src = "/home/shared_projects/TESI/tesi_cezar_grigorean/code/www/VariantInvestigator_logo_blue.png",
+      contentType = "image/png",
+      width = 75,
+      height = 50
     )
+  }, deleteFile = FALSE)
   
-  #separo polyphen e sift in base a predizione di patogenicità e score puramente numerico
-  vcf[[z]] <- separate_wider_delim(vcf[[z]], "SIFT_1", delim = "(", names = c("SIFT_prediction","SIFT_values"), too_few = "align_start")
-  vcf[[z]] <- separate_wider_delim(vcf[[z]], "PolyPhen_1", delim = "(", names = c("PolyPhen_prediction","PolyPhen_values"), too_few = "align_start")
-  
-  
-  vcf[[z]]$SIFT_values <- gsub(")", "", vcf[[z]]$SIFT_values) %>%
-    as.numeric(vcf[[z]]$SIFT_values)
-  vcf[[z]]$PolyPhen_values <- gsub(")", "", vcf[[z]]$PolyPhen_values) %>%
-    as.numeric(vcf[[z]]$PolyPhen_values)
-  
-  rm(GT,AD,DP,GQ,MIN_DP,PGT,PID,PL,PS,RGQ)
-  
-  k <- k + 1
-  
-}
-
-close(vcfchunking)
-
-#elimino vcf vuoto
-vcf <- vcf[1:k-1]
-
-#modifico in tibble tutti i chunk del VCF
-z <- 1
-
-
-
-while (z < k) {
-#raccolgo informazioni sulle varianti
-GT <- as.tibble(geno(vcf[[z]])$GT) %>%
-  rename("GT" = "NG2191_NG2191")
-  
-
-AD <- as.tibble(geno(vcf[[z]])$AD) %>%
-  rename("AD" = "NG2191_NG2191") %>%
-  unnest_wider(col = "AD", names_sep = "_")
-
-DP <- as_tibble(geno(vcf[[z]])$DP) %>%
-  rename("DP" = "NG2191_NG2191") %>%
-  unnest_wider(col="DP", names_sep = "_")
-
-GQ <- as_tibble(geno(vcf[[z]])$GQ) %>% 
-  rename("GQ" = "NG2191_NG2191")
-
-
-MIN_DP <- as_tibble(geno(vcf[[z]])$MIN_DP) %>% 
-  rename("MIN_DP" = "NG2191_NG2191")
-
-
-PGT <- as_tibble(geno(vcf[[z]])$PGT) %>% 
-  rename("PGT" = "NG2191_NG2191")
-
-
-PID <- as_tibble(geno(vcf[[z]])$PID) %>% 
-  rename("PID" = "NG2191_NG2191")
-
-
-PL <- as_tibble(geno(vcf[[z]])$PL) %>%
-  rename("PL" = "NG2191_NG2191") %>%
-  unnest_wider(col = "PL", names_sep = "_")
-
-PS <- as_tibble(geno(vcf[[z]])$PS) %>% 
-  rename("PS" = "NG2191_NG2191")
-
-RGQ <- as_tibble(geno(vcf[[z]])$RGQ) %>% 
-  rename("RGQ" = "NG2191_NG2191")
-
-
-
-genotype <- bind_cols(GT, AD, DP, GQ, MIN_DP, PGT, PID, PL, PS, RGQ)
-
-
-  
-annotations_plain = as_tibble(info(vcf[[z]]))%>%
-  unnest_wider(col = where(~ type_sum(.x) == "list")|where(~ type_sum(.x) == "I<list>"), names_sep = "_")
-
-
-  
-  
-get_alternative <- function(alt_list){
-  alleles = paste0(unlist(lapply(alt_list, as.character)), collapse = ",")
-  return(alleles)
-}
-get_first <- function(x){
-  res = NULL
-  if(is.list(x)){
-    res = x[[1]]
-  }
-  else {
-    res = x
-  }
-  return(x)
-}
-  var_coordinates = as_tibble(rowRanges(vcf[[z]])) %>%
-    rowwise %>%
-    mutate(
-      ALT = get_alternative(ALT)
-      ) 
-
+  options(shiny.maxRequestSize=3000*1024^2)
  
-  
-  
-  #rimuovo dalle info le colonne superflue, rendo digeribili le info al tibble
-  annotations_plain = as_tibble(info(vcf[[z]]))%>%
-    unnest_wider(col = where(~ type_sum(.x) == "list")|where(~ type_sum(.x) == "I<list>"), names_sep = "_")
-  
-#raccolgo informazioni sulla posizione delle varianti
-test_alt = var_coordinates %>%
-    filter(length(ALT) > 1) %>% 
-    head(1L) %>% 
-    pull(ALT)
-
-unlist(lapply(test_alt, as.character))
-
-
-
-get_alternative(test_alt)
-
-
-#unisco informazioni e posizione delle varianti
-
-vcf[[z]] = bind_cols(
-    var_coordinates,
-    genotype,
-    annotations_plain
-    ) %>% 
-    dplyr::select(-("END")) %>% 
-    mutate(
-      across(where(~ type_sum(.x) == "fct"), as.character)
-    ) %>% 
-    dplyr::select(
-      where(~ type_sum(.x) == "int") | 
-        where(~ type_sum(.x) == "dbl") | 
-        where(~ type_sum(.x) == "chr")
+  sqlfunc <- reactive({
+    
+    shinyDirChoose(
+      input,
+      'dir',
+      roots = c(home = '~')
     )
+    
+    global <- reactiveValues(datapath = getwd())
+    
+    dirct <- input$dir
+    
+    source("/home/shared_projects/TESI/tesi_cezar_grigorean/code/file_directory.R")
+    
+    con <- dbConnect(RSQLite::SQLite(), 
+                     # datafile
+                     "/home/shared_projects/TESI/tesi_cezar_grigorean/data/test.sqlite"
+                     )
+    sqloutput <- dbSendQuery(con, paste("SELECT *
+                          FROM variants
+                          WHERE impact LIKE ?"),
+                          params = list(c(paste(input$impact)))
+  ) %>%
+    dbFetch()   %>%
+      dplyr::mutate(gnomad_af = as.numeric(gnomad_af))%>% 
+      dplyr::filter(grepl(paste(paste0("^", input$chr, "$"), collapse = "|"), chromosome)) %>%
+      dplyr::filter(gnomad_af <= input$gnomad |
+                      is.na(gnomad_af) == TRUE) %>%
+      dplyr::filter(grepl(paste0("^", input$searchgene),
+                          symbol,
+                          ignore.case = TRUE)) %>%
+      dplyr::filter(grepl(paste(input$conseq, collapse = "|"),
+                          consequence)) %>%
+      dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof)) %>% 
+      separate_wider_delim("sift", 
+                           delim = "(", 
+                           names = c("sift_prediction","sift_values"), 
+                           too_few = "align_start") %>% 
+      separate_wider_delim("polyphen", 
+                           delim = "(", 
+                           names = c("polyphen_prediction","polyphen_values"), 
+                           too_few = "align_start")
+    
+    #risistemo nome della colonna SIFT per l'app finale
+    sqloutput$sift_values <- gsub(")", "", sqloutput$sift_values) %>%
+      as.numeric(sqloutput$sift_values)
+    
+    #stesso lavoro per polyphen
+    sqloutput$polyphen_values <- gsub(")", "", sqloutput$polyphen_values) %>%
+      as.numeric(sqloutput$polyphen_values)
+      
+  sqloutput  <- sqloutput %>% 
+    dplyr::filter(sift_values <= input$SIFT |
+                    is.na(sift_values) == TRUE) %>%
+    dplyr::filter(polyphen_values >= input$PolyPhen |
+                    is.na(polyphen_values) == TRUE)
+  
+  })
+  
+    output$table <- render_gt({
 
-#separo polyphen e sift in base a predizione di patogenicità e score puramente numerico
-vcf[[z]] <- separate_wider_delim(vcf[[z]], "SIFT_1", delim = "(", names = c("SIFT_prediction","SIFT_values"), too_few = "align_start")
-vcf[[z]] <- separate_wider_delim(vcf[[z]], "PolyPhen_1", delim = "(", names = c("PolyPhen_prediction","PolyPhen_values"), too_few = "align_start")
+      if(input$load == TRUE) {
+        data_vars <- sqlfunc() %>% 
+          dplyr::filter(grepl(paste(paste0("^", input$chr, "$"), collapse = "|"), chromosome)) %>%
+          dplyr::filter(gnomad_af <= input$gnomad |
+                          is.na(gnomad_af) == TRUE) %>%
+          dplyr::filter(grepl(paste0("^", input$searchgene),
+                              symbol,
+                              ignore.case = TRUE)) %>%
+          dplyr::filter(grepl(paste(input$conseq, collapse = "|"),
+                              consequence)) %>%
+          dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof)) 
+      }
+      
+      
+      data_vars %>%  
+        dplyr::mutate(symbol = paste0("<a target = '_blank' href = 'https://varsome.com/gene/hg38/", symbol, "'>",symbol,"</a>")) %>% 
+        dplyr::mutate(symbol = map(symbol, gt::html)) %>%
 
+      gt() %>%
+      fmt_number(decimals = 10,
+                 drop_trailing_zeros = TRUE) %>%
+      opt_interactive(
+        use_search = TRUE,
+        use_filters = TRUE,
+        use_resizers = TRUE,
+        use_highlight = TRUE,
+        use_compact_mode = TRUE,
+        use_text_wrapping = FALSE,
+        use_page_size_select = TRUE,
+        page_size_default = 10,
+        page_size_values = c(10, 25, 50, 100, 200)
+      )
 
-vcf[[z]]$SIFT_values <- gsub(")", "", vcf[[z]]$SIFT_values) %>%
-  as.numeric(vcf[[z]]$SIFT_values)
-vcf[[z]]$PolyPhen_values <- gsub(")", "", vcf[[z]]$PolyPhen_values) %>%
-  as.numeric(vcf[[z]]$PolyPhen_values)
+  })
+    
+    source("/home/shared_projects/TESI/tesi_cezar_grigorean/code/shinyfunctions.R")
+    
+    output$dropdownbutt <- renderUI({
+      
+      if(input$load == TRUE) {
+        data_vars <- sqlfunc() %>% 
+          dplyr::filter(grepl(paste(paste0("^", input$chr, "$"), collapse = "|"), chromosome)) %>%
+          dplyr::filter(gnomad_af <= input$gnomad |
+                          is.na(gnomad_af) == TRUE) %>%
+          dplyr::filter(grepl(paste0("^", input$searchgene),
+                              symbol,
+                              ignore.case = TRUE)) %>%
+          dplyr::filter(grepl(paste(input$conseq, collapse = "|"),
+                              consequence)) %>%
+          dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof)) 
+      }
+      
+      
+      
+      
+      dropdownButton(
 
-rm(GT,AD,DP,GQ,MIN_DP,PGT,PID,PL,PS,RGQ)
-
-  z <- z+1
+        pickerInput(inputId = 'gene',
+                    label = 'Genes chosen',
+                    choices = c("",
+                                unique(data_vars$symbol)
+                                )
+        ),
+        circle = FALSE,
+        icon = icon("dna"),
+        status = "",
+        width = "50px"
+      )
+    })
+    
+    output$genestbl <- renderPlot({
+      req(input$gene)
+      
+      sqlfunc() %>% 
+        dplyr::filter(symbol == input$gene) %>%
+        gene_information_integration()
+    })
+    on.exit(dbDisconnect(con), add = TRUE)
 }
 
-#unisco pezzi del vcf
-vcf <- bind_rows(vcf)%>%
-  select(-("LOF_1"))
-
-#carico vcf in sqlite
-copy_to(con, vcf, "variants",
-        temporary = FALSE, 
-        indexes = list(
-          c("seqnames", "start", "end", "ref", "ALT"))
-        )
-#pulizia
-rm(z,k, annotations_plain,vcf,var_coordinates,get_alternative,get_first,vcf,chunksize,test_alt,vcfchunking,genotype)
-
-variants_db <- tbl(con, "variants")
-
-# view(variants_db)
-#---------------
-
-# #funzioni filtro-------------
-# #frequenza gnomAD
-# freq_gnomAD <- function(gnomin, gnomax){variants_db %>%
-#     dplyr::filter(between(gnomAD_AF_1, gnomAD[1], gnomAD[2]))
-# }
-# #frequenza massima tra gnomAD, 1000genome e ESP
-# freq_max <- function(min_maf, max_maf){variants_db %>%
-#   dplyr::filter(between(MAX_AF, min_maf, max_maf))
-#   }
-# #frequenza 1000genome
-# freq_1000genome <- function(min1000, max1000){variants_db %>%
-#   dplyr::filter(between(AF, min1000, max1000))
-#   }
-# #genotype quality
-# geno_qual <- function(gq){variants_db %>%
-#   dplyr::filter(GenoQual >= gq)
-#   }
-# #read depth
-# read_depth <-function(read_dp){variants_db %>%
-#   dplyr::filter(readDP >= read_dp)
-#   }
-# #gene name
-# gene_name <- function(name){variants_db %>%
-#   dplyr::filter(SYMBOL_1 == name)
-# }
-# #dove cade la mutazione (conseguenza) -> da
-# var_conseq <- function(conseq){variants_db %>%
-#   dplyr::filter(Consequence %like% conseq)
-#   }
-# #esone/introne della mutazione
-# exon <- function(ex){variants_db %>%
-#   dplyr::filter(EXON == ex)
-#   }
-# intron <- function(intr){variants_db %>%
-#   dplyr::filter(INTRON == intr)
-# }
-# #SIFT e PolyPhen
-# sift <- function(minsft, maxsft){variants_db %>%
-#     dplyr::filter(between(SIFT_values, minsft, maxsft))
-# }
-# polyphen <- function(minpol, maxpol){variants_db %>%
-#     dplyr::filter(between(PolyPhen_values, minpol, maxpol))
-# }
-# #flag per lof annotate
-# flag_lof <- function(){variants_db %>%
-#     filter(LoF_1 == "HC")}
-# 
-# polyphen(0,1)
-# 
-# view(variants_db %>% select(LoF_1))
-# #----------------------------
-
-#------------------------------------------
+shinyApp(ui, server)
