@@ -17,11 +17,10 @@ library(Rsamtools)
 library(trackViewer)
 library(shinyFiles)
 
-# con <- dbConnect(RSQLite::SQLite(),
-#                  "/home/shared_projects/TESI/tesi_cezar_grigorean/data/test.sqlite"
-# )
-# 
-# datafile <- file_input_f()
+
+
+
+
 
 ui <- page_sidebar(
   sidebar = sidebar(
@@ -31,10 +30,9 @@ ui <- page_sidebar(
       width = 200,
       style = "margin:1px 1px"
     ), ""),
-    
-    # fileInput("file", label = "input sqlite file"),
-    shinyDirButton("dir", "Select file", "Upload"),
-    
+
+    fileInput("sql", "insert sql file to analyze", multiple = FALSE),
+
     sliderInput(
       inputId = "gnomad",
       "Maximum gnomAD allele frequency",
@@ -43,7 +41,7 @@ ui <- page_sidebar(
       step = 0.001,
       value = 1
     ),
-    
+
     sliderInput(
       inputId = "SIFT",
       "Maximum SIFT value",
@@ -52,7 +50,7 @@ ui <- page_sidebar(
       step = 0.01,
       value = 1
     ),
-    
+
     sliderInput(
       inputId = "PolyPhen",
       "Minimum PolyPhen value",
@@ -61,8 +59,8 @@ ui <- page_sidebar(
       step = 0.01,
       value = 0
     ),
-    
-    
+
+
     pickerInput(
       inputId = "impact",
       label = "Variant impact",
@@ -71,7 +69,7 @@ ui <- page_sidebar(
       options = list(`actions-box` = TRUE),
       multiple = TRUE
     ),
-    
+
     pickerInput(
       "HC",
       "High confidence LOF variants",
@@ -79,7 +77,7 @@ ui <- page_sidebar(
       selected = c("HC"),
       multiple = TRUE
     ),
-    
+
     pickerInput(
       inputId = "chr",
       label = "Chromosomes in analysis",
@@ -97,11 +95,11 @@ ui <- page_sidebar(
       options = list(`actions-box` = TRUE),
       multiple = TRUE
     ),
-    
+
     textInput("searchgene",
               "Filter by gene name",
               value = ""),
-    
+
     pickerInput(
       inputId = "conseq",
       label = "Specific consequences (All consequences preselected)",
@@ -194,10 +192,10 @@ ui <- page_sidebar(
       options = c(`actions-box` = TRUE),
       multiple = TRUE
     ),
-    
+
     checkboxInput(inputId ="load", label = "Apply filters", value = FALSE)
-    
-    
+
+
   ),
   layout_columns(
     card(
@@ -208,9 +206,9 @@ ui <- page_sidebar(
     card(
       card_header("Affected genes"),
       full_screen = TRUE,
-      
+
       uiOutput("dropdownbutt"),
-      
+
       plotOutput("genestbl")
     ),
     width = "400px"
@@ -220,40 +218,36 @@ ui <- page_sidebar(
 server <- function(input, output, session) {
   output$myImage <- renderImage({
     list(
-      src = "/home/shared_projects/TESI/tesi_cezar_grigorean/code/www/VariantInvestigator_logo_blue.png",
+      src = "/www/VariantInvestigator_logo_blue.png",
       contentType = "image/png",
       width = 75,
       height = 50
     )
   }, deleteFile = FALSE)
-  
+
+  dirfile <- reactive(input$file %>% as.character)
+
+
   options(shiny.maxRequestSize=3000*1024^2)
- 
+
   sqlfunc <- reactive({
-    
-    shinyDirChoose(
-      input,
-      'dir',
-      roots = c(home = '~')
-    )
-    
-    global <- reactiveValues(datapath = getwd())
-    
+
+
+    con <- dbConnect(RSQLite::SQLite(),
+                     dirfile)
+
     dirct <- input$dir
-    
-    source("/home/shared_projects/TESI/tesi_cezar_grigorean/code/file_directory.R")
-    
-    con <- dbConnect(RSQLite::SQLite(), 
-                     # datafile
-                     "/home/shared_projects/TESI/tesi_cezar_grigorean/data/test.sqlite"
-                     )
+
+
+
+
     sqloutput <- dbSendQuery(con, paste("SELECT *
                           FROM variants
                           WHERE impact LIKE ?"),
                           params = list(c(paste(input$impact)))
   ) %>%
     dbFetch()   %>%
-      dplyr::mutate(gnomad_af = as.numeric(gnomad_af))%>% 
+      dplyr::mutate(gnomad_af = as.numeric(gnomad_af))%>%
       dplyr::filter(grepl(paste(paste0("^", input$chr, "$"), collapse = "|"), chromosome)) %>%
       dplyr::filter(gnomad_af <= input$gnomad |
                       is.na(gnomad_af) == TRUE) %>%
@@ -262,36 +256,36 @@ server <- function(input, output, session) {
                           ignore.case = TRUE)) %>%
       dplyr::filter(grepl(paste(input$conseq, collapse = "|"),
                           consequence)) %>%
-      dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof)) %>% 
-      separate_wider_delim("sift", 
-                           delim = "(", 
-                           names = c("sift_prediction","sift_values"), 
-                           too_few = "align_start") %>% 
-      separate_wider_delim("polyphen", 
-                           delim = "(", 
-                           names = c("polyphen_prediction","polyphen_values"), 
+      dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof)) %>%
+      separate_wider_delim("sift",
+                           delim = "(",
+                           names = c("sift_prediction","sift_values"),
+                           too_few = "align_start") %>%
+      separate_wider_delim("polyphen",
+                           delim = "(",
+                           names = c("polyphen_prediction","polyphen_values"),
                            too_few = "align_start")
-    
+
     #risistemo nome della colonna SIFT per l'app finale
     sqloutput$sift_values <- gsub(")", "", sqloutput$sift_values) %>%
       as.numeric(sqloutput$sift_values)
-    
+
     #stesso lavoro per polyphen
     sqloutput$polyphen_values <- gsub(")", "", sqloutput$polyphen_values) %>%
       as.numeric(sqloutput$polyphen_values)
-      
-  sqloutput  <- sqloutput %>% 
+
+  sqloutput  <- sqloutput %>%
     dplyr::filter(sift_values <= input$SIFT |
                     is.na(sift_values) == TRUE) %>%
     dplyr::filter(polyphen_values >= input$PolyPhen |
                     is.na(polyphen_values) == TRUE)
-  
+
   })
-  
+
     output$table <- render_gt({
 
       if(input$load == TRUE) {
-        data_vars <- sqlfunc() %>% 
+        data_vars <- sqlfunc() %>%
           dplyr::filter(grepl(paste(paste0("^", input$chr, "$"), collapse = "|"), chromosome)) %>%
           dplyr::filter(gnomad_af <= input$gnomad |
                           is.na(gnomad_af) == TRUE) %>%
@@ -300,12 +294,12 @@ server <- function(input, output, session) {
                               ignore.case = TRUE)) %>%
           dplyr::filter(grepl(paste(input$conseq, collapse = "|"),
                               consequence)) %>%
-          dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof)) 
+          dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof))
       }
-      
-      
-      data_vars %>%  
-        dplyr::mutate(symbol = paste0("<a target = '_blank' href = 'https://varsome.com/gene/hg38/", symbol, "'>",symbol,"</a>")) %>% 
+
+
+      data_vars %>%
+        dplyr::mutate(symbol = paste0("<a target = '_blank' href = 'https://varsome.com/gene/hg38/", symbol, "'>",symbol,"</a>")) %>%
         dplyr::mutate(symbol = map(symbol, gt::html)) %>%
 
       gt() %>%
@@ -324,13 +318,13 @@ server <- function(input, output, session) {
       )
 
   })
-    
-    source("/home/shared_projects/TESI/tesi_cezar_grigorean/code/shinyfunctions.R")
-    
+
+    source("shinyfunctions.R")
+
     output$dropdownbutt <- renderUI({
-      
+
       if(input$load == TRUE) {
-        data_vars <- sqlfunc() %>% 
+        data_vars <- sqlfunc() %>%
           dplyr::filter(grepl(paste(paste0("^", input$chr, "$"), collapse = "|"), chromosome)) %>%
           dplyr::filter(gnomad_af <= input$gnomad |
                           is.na(gnomad_af) == TRUE) %>%
@@ -339,12 +333,12 @@ server <- function(input, output, session) {
                               ignore.case = TRUE)) %>%
           dplyr::filter(grepl(paste(input$conseq, collapse = "|"),
                               consequence)) %>%
-          dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof)) 
+          dplyr::filter(grepl(paste(input$HC, collapse = "|"), lof))
       }
-      
-      
-      
-      
+
+
+
+
       dropdownButton(
 
         pickerInput(inputId = 'gene',
@@ -359,11 +353,11 @@ server <- function(input, output, session) {
         width = "50px"
       )
     })
-    
+
     output$genestbl <- renderPlot({
       req(input$gene)
-      
-      sqlfunc() %>% 
+
+      sqlfunc() %>%
         dplyr::filter(symbol == input$gene) %>%
         gene_information_integration()
     })
