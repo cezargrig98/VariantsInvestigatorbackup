@@ -17,7 +17,7 @@ gene_information_integration <- function(res){
   res$strand[res$strand == 1] <- "+"
 
  
-  refgenome <- readRDS("refgenome_model.rds")
+  refgenome <- readRDS("/data/refgenome_model.rds")
   
   refgenome <- refgenome %>% 
     dplyr::filter(grepl(paste0("^", res$gene),
@@ -77,7 +77,10 @@ gene_information_integration <- function(res){
   }
 
 
-file_input_f <- function(){
-  directory_file <- file.choose()
-  return(dir(directory_file))
-}
+# file_input_f <- function(){
+#   directory_file <- file.choose()
+#   return(dir(directory_file))
+# }
+
+#  return(dir(directory_file))
+#}
